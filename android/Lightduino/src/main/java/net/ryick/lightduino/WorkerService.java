@@ -17,6 +17,8 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class WorkerService extends Service {
@@ -27,13 +29,15 @@ public class WorkerService extends Service {
     private boolean mThreadRun = false;
     private BluetoothSocket mBtSocket = null;
     private String mCmd;
+    private List<ILightListener> mLightListeners = new ArrayList<ILightListener>();
+
     private enum BtStatus {
         UNKNOWN,
         OFF,
         DISCONNECTED,
         CONNECTED
     };
-    private enum LightStatus {
+    public enum LightStatus {
         UNKNOWN,
         ON,
         OFF
@@ -70,6 +74,7 @@ public class WorkerService extends Service {
             mCmd = MSG_OFF;
             mThreadRun = false;
             configureAlarmAndClear(false);
+            setLightStatus(LightStatus.OFF);
         } else {
             if (intent == null) {
                 //restart, do nothing if light off
@@ -128,7 +133,14 @@ public class WorkerService extends Service {
     }
 
     public LightStatus getLightStatus() {
-        return mLightStatus;
+        SharedPreferences sp = this.getSharedPreferences("lightduino", Context.MODE_PRIVATE);
+        if (sp.contains ("lightOn") == false) {
+            return LightStatus.UNKNOWN;
+        } else if (sp.getBoolean("lightOn", false) == true) {
+            return LightStatus.ON;
+        } else {
+            return LightStatus.OFF;
+        }
     }
 
     private void setLightStatus(LightStatus status) {
@@ -138,8 +150,14 @@ public class WorkerService extends Service {
             SharedPreferences.Editor editor = sp.edit();
             if (mLightStatus == LightStatus.ON) {
                 editor.putBoolean("lightOn", true);
+                for(ILightListener il : mLightListeners) {
+                    il.lightOn();
+                }
             } else {
                 editor.putBoolean("lightOn", false);
+                for(ILightListener il : mLightListeners) {
+                    il.lightOff();
+                }
             }
             editor.commit();
         }
@@ -248,7 +266,7 @@ public class WorkerService extends Service {
                     }
                 }
                 try {
-                    Thread.sleep(5 * 1000L);
+                    Thread.sleep(2 * 1000L);
                 } catch (Exception e) {
                 }
             }
@@ -291,4 +309,12 @@ public class WorkerService extends Service {
             }
         }
     };
+
+    public void addLightListener(ILightListener l) {
+        mLightListeners.add(l);
+    }
+
+    public void removeLightListener(ILightListener l) {
+        mLightListeners.remove(l);
+    }
 }
