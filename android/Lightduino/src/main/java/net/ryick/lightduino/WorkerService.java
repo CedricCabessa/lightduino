@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.SystemClock;
@@ -65,16 +66,24 @@ public class WorkerService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "onStartCommand");
         mCmd = MSG_ON;
-        if (intent.getBooleanExtra("disconnected", false)) {
+        if (intent != null && intent.getBooleanExtra("disconnected", false)) {
             mCmd = MSG_OFF;
             mThreadRun = false;
             configureAlarmAndClear(false);
         } else {
-            synchronized (this) {
-                if (mThreadRun == false) {
-                    mThreadRun = true;
-                    new Thread(mSenderTask).start();
-                    new Thread(mReceiverTask).start();
+            if (intent == null) {
+                //restart, do nothing if light off
+                SharedPreferences sp = this.getSharedPreferences("lightduino", Context.MODE_PRIVATE);
+                if (sp.getBoolean("lightOn", false) == false) {
+                    return START_STICKY;
+                }
+            } else {
+                synchronized (this) {
+                    if (mThreadRun == false) {
+                        mThreadRun = true;
+                        new Thread(mSenderTask).start();
+                        new Thread(mReceiverTask).start();
+                    }
                 }
             }
         }
@@ -122,15 +131,31 @@ public class WorkerService extends Service {
         return mLightStatus;
     }
 
-    // I hope that the last message is ok
-    private void setLightSatus() {
-        if (mCmd.equals(MSG_OFF)) {
-            mLightStatus = LightStatus.OFF;
-        } else if (mCmd.equals(MSG_ON)) {
-            mLightStatus = LightStatus.ON;
-        } else {
-            mLightStatus = LightStatus.UNKNOWN;
+    private void setLightStatus(LightStatus status) {
+        if (mLightStatus != status) {
+            mLightStatus = status;
+            SharedPreferences sp = this.getSharedPreferences("lightduino", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = sp.edit();
+            if (mLightStatus == LightStatus.ON) {
+                editor.putBoolean("lightOn", true);
+            } else {
+                editor.putBoolean("lightOn", false);
+            }
+            editor.commit();
         }
+    }
+
+    // I hope that the last message is ok
+    private void setLightStatus() {
+        LightStatus tmp;
+        if (mCmd.equals(MSG_OFF)) {
+            tmp = LightStatus.OFF;
+        } else if (mCmd.equals(MSG_ON)) {
+            tmp = LightStatus.ON;
+        } else {
+            tmp = LightStatus.UNKNOWN;
+        }
+        setLightStatus(tmp);
     }
 
 
@@ -212,7 +237,7 @@ public class WorkerService extends Service {
                             buf.append((char)c);
                         }
                         if (buf.toString().contains("ack")) {
-                            setLightSatus();
+                            setLightStatus();
                             mBtSocket.getOutputStream().write("acked".getBytes());
                             Log.d(TAG, "ack, bye");
                             WorkerService.this.mThreadRun = false;
