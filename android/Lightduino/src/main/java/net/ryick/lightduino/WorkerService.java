@@ -42,7 +42,6 @@ public class WorkerService extends Service {
         ON,
         OFF
     }
-    private LightStatus mLightStatus = LightStatus.UNKNOWN;
 
     private static final String MSG_ON = "relay on";
     private static final String MSG_OFF = "relay off";
@@ -74,7 +73,7 @@ public class WorkerService extends Service {
             mCmd = MSG_OFF;
             mThreadRun = false;
             configureAlarmAndClear(false);
-            setLightStatus(LightStatus.OFF);
+            setLighIsOn(false);
         } else {
             if (intent == null) {
                 //restart, do nothing if light off
@@ -143,37 +142,31 @@ public class WorkerService extends Service {
         }
     }
 
-    private void setLightStatus(LightStatus status) {
-        if (mLightStatus != status) {
-            mLightStatus = status;
-            SharedPreferences sp = this.getSharedPreferences("lightduino", Context.MODE_PRIVATE);
+    private void setLighIsOn(boolean isOn) {
+        SharedPreferences sp = this.getSharedPreferences("lightduino", Context.MODE_PRIVATE);
+        if (sp.contains("lightOn") == false || sp.getBoolean("lightOn", false) != isOn) {
             SharedPreferences.Editor editor = sp.edit();
-            if (mLightStatus == LightStatus.ON) {
-                editor.putBoolean("lightOn", true);
+            editor.putBoolean("lightOn", isOn);
+            editor.commit();
+            if (isOn) {
                 for(ILightListener il : mLightListeners) {
                     il.lightOn();
                 }
             } else {
-                editor.putBoolean("lightOn", false);
                 for(ILightListener il : mLightListeners) {
                     il.lightOff();
                 }
             }
-            editor.commit();
         }
     }
 
     // I hope that the last message is ok
     private void setLightStatus() {
-        LightStatus tmp;
-        if (mCmd.equals(MSG_OFF)) {
-            tmp = LightStatus.OFF;
-        } else if (mCmd.equals(MSG_ON)) {
-            tmp = LightStatus.ON;
+        if (mCmd.equals(MSG_ON)) {
+            setLighIsOn(true);
         } else {
-            tmp = LightStatus.UNKNOWN;
+            setLighIsOn(false);
         }
-        setLightStatus(tmp);
     }
 
 
