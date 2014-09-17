@@ -46,6 +46,7 @@ void loop () {
       Serial.write("ack");
   }
 
+  if(lastseen - millis() > 0) lastseen=0;
 
   if (now - lastseen > 1000L*60*40) {
       relaySwitch(false);
